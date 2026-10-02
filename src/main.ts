@@ -10,6 +10,7 @@ import '@fontsource/be-vietnam-pro/latin-700.css'
 import './style.css'
 import App from './App.vue'
 import { init } from './store'
+import './lib/install'
 
 createApp(App).mount('#app')
 init()

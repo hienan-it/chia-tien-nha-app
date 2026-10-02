@@ -64,7 +64,7 @@ async function submit() {
       <input id="pAmt" v-model="amountText" class="in big" inputmode="decimal" autocomplete="off" />
       <div class="chips" style="margin-top: 10px">
         <button v-for="q in quick" :key="q.ratio" type="button" class="chip" :aria-pressed="quickActive(q.ratio)" @click="pick(q.ratio)">{{ q.label }}</button>
-        <button v-if="!iReceive" type="button" class="chip" @click="Number.isFinite(amount) && copyText(String(amount), 'số tiền')">Chép số tiền</button>
+        <button v-if="!iReceive" type="button" class="chip" @click="Number.isFinite(amount) && copyText(String(amount), 'số tiền')">Copy số tiền</button>
       </div>
       <div class="hint">{{ hint }}</div>
       <div class="err">{{ err }}</div>
