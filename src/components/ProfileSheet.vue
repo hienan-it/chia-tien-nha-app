@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { logout, membersById, myId, saveProfile, state } from '../store'
 import { compressImage, safeImage } from '../lib/image'
 import { copyText, errMsg, toast } from '../lib/util'
+import { installState, promptInstall } from '../lib/install'
 
 const emit = defineEmits<{ close: [] }>()
 const me = membersById.value[myId.value]
@@ -113,6 +114,13 @@ async function doLogout() {
     <button type="button" @click="copyText(inviteLink, 'link mời')">Chép link mời</button>
     <button v-if="canShare" type="button" class="primary" @click="share">Gửi link</button>
   </div>
+
+  <template v-if="!installState.installed && (installState.canPrompt || installState.ios)">
+    <hr class="section-sep" />
+    <h3>Cài app</h3>
+    <button v-if="installState.canPrompt" type="button" class="btn secondary" style="margin-top: 0" @click="promptInstall">Cài app lên màn hình chính</button>
+    <p v-else class="hint">Trong Safari, bấm nút <b>Chia sẻ</b> rồi chọn <b>Thêm vào MH chính</b>.</p>
+  </template>
 
   <hr class="section-sep" />
   <p class="hint">Tài khoản: {{ state.user?.email }}</p>
