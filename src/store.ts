@@ -1,13 +1,18 @@
 import { computed, reactive } from 'vue'
-import type { RealtimeChannel } from '@supabase/supabase-js'
-import { supabase, configured } from './lib/supabase'
+import type { RealtimeChannel, User } from '@supabase/supabase-js'
+import { supabase, configured, isRecoveryLink } from './lib/supabase'
 import { computeDebts } from './lib/money'
 import { errMsg } from './lib/util'
-import type { EnterStatus, GroupPreview, Me, Member, Payment, Txn } from './lib/types'
+import type { Account, GroupPreview, JoinStatus, Me, Member, Payment, Txn } from './lib/types'
 
 export const state = reactive({
   ready: false,
   initError: '',
+  user: null as Account | null,
+  // vừa bấm link đặt lại mật khẩu trong email
+  recovery: isRecoveryLink,
+  groups: [] as Me[],
+  // nhóm đang xem
   me: null as Me | null,
   members: [] as Member[],
   txns: [] as Txn[],
@@ -21,30 +26,35 @@ export const debts = computed(() => computeDebts(memberIds.value, state.txns, st
 export const myId = computed(() => state.me?.member_id ?? '')
 export const nm = (id: string) => membersById.value[id]?.name ?? 'Thành viên cũ'
 
-/* ---------- boot ---------- */
-async function ensureSession() {
-  const { data } = await supabase.auth.getSession()
-  if (data.session) return
-  const { error } = await supabase.auth.signInAnonymously()
-  if (error) throw error
+/* ---------- nhóm đang xem (nhớ trên máy) ---------- */
+const ACTIVE_KEY = 'active-group'
+function savedGroup() {
+  try {
+    return localStorage.getItem(ACTIVE_KEY)
+  } catch {
+    return null
+  }
+}
+function saveGroup(gid: string) {
+  try {
+    localStorage.setItem(ACTIVE_KEY, gid)
+  } catch {}
 }
 
-async function loadMe() {
-  const { data, error } = await supabase.rpc('me')
-  if (error) throw error
-  state.me = (data as Me | null) ?? null
-}
-
+/* ---------- load ---------- */
 export async function loadAll() {
   if (!state.me) return
+  const gid = state.me.group_id
   const [m, t, p] = await Promise.all([
-    supabase.from('members').select('*').order('joined_at'),
-    supabase.from('txns').select('*').order('date', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('payments').select('*').order('date', { ascending: false }).order('created_at', { ascending: false })
+    supabase.from('members').select('*').eq('group_id', gid).order('joined_at'),
+    supabase.from('txns').select('*').eq('group_id', gid).order('date', { ascending: false }).order('created_at', { ascending: false }),
+    supabase.from('payments').select('*').eq('group_id', gid).order('date', { ascending: false }).order('created_at', { ascending: false })
   ])
   if (m.error) throw m.error
   if (t.error) throw t.error
   if (p.error) throw p.error
+  // đã đổi sang nhóm khác trong lúc chờ
+  if (state.me?.group_id !== gid) return
   state.members = m.data as Member[]
   state.txns = (t.data as Txn[]).map((x) => ({ ...x, amount: Number(x.amount) }))
   state.payments = (p.data as Payment[]).map((x) => ({ ...x, amount: Number(x.amount) }))
@@ -76,21 +86,53 @@ async function unsubscribe() {
   channel = null
 }
 
-async function afterEnter() {
-  await loadMe()
+function clearGroup() {
+  state.me = null
+  state.members = []
+  state.txns = []
+  state.payments = []
+}
+
+export async function loadGroups() {
+  const { data, error } = await supabase.rpc('my_groups')
+  if (error) throw error
+  state.groups = (data as Me[] | null) ?? []
+}
+
+export async function selectGroup(gid: string) {
+  const g = state.groups.find((x) => x.group_id === gid)
+  if (!g) return
+  await unsubscribe()
+  clearGroup()
+  state.me = g
+  saveGroup(gid)
   await loadAll()
   subscribe()
+}
+
+/* ---------- boot ---------- */
+function setUser(u: User | null) {
+  state.user = u ? { id: u.id, email: u.email ?? '', name: (u.user_metadata?.name as string | undefined) ?? '' } : null
+}
+
+async function afterLogin(u: User) {
+  setUser(u)
+  await loadGroups()
+  const first = state.groups.find((g) => g.group_id === savedGroup()) ?? state.groups[0]
+  if (first) await selectGroup(first.group_id)
 }
 
 export async function init() {
   try {
     if (!configured) throw new Error('Chưa cấu hình VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY trong file .env')
-    await ensureSession()
-    await loadMe()
-    if (state.me) {
-      await loadAll()
-      subscribe()
-    }
+    supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') state.recovery = true
+    })
+    const { data } = await supabase.auth.getSession()
+    const u = data.session?.user
+    // phiên ẩn danh của bản cũ: bỏ, bắt đăng nhập bằng tài khoản
+    if (u?.is_anonymous) await supabase.auth.signOut()
+    else if (u) await afterLogin(u)
   } catch (e) {
     state.initError = errMsg(e)
   } finally {
@@ -101,11 +143,53 @@ export async function init() {
   })
 }
 
-/* ---------- onboarding ---------- */
-export async function createGroup(groupName: string, name: string, pin: string) {
-  const { error } = await supabase.rpc('create_group', { p_group_name: groupName, p_name: name, p_pin: pin })
+/* ---------- tài khoản ---------- */
+export async function signIn(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
-  await afterEnter()
+  await afterLogin(data.user)
+}
+
+/** false = cần xác nhận email trước khi đăng nhập */
+export async function signUp(email: string, password: string, name: string): Promise<boolean> {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { name }, emailRedirectTo: window.location.origin + window.location.search }
+  })
+  if (error) throw error
+  if (!data.session || !data.user) return false
+  await afterLogin(data.user)
+  return true
+}
+
+export async function sendPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+  if (error) throw error
+}
+
+export async function setNewPassword(password: string) {
+  const { data, error } = await supabase.auth.updateUser({ password })
+  if (error) throw error
+  state.recovery = false
+  await afterLogin(data.user)
+}
+
+export async function logout() {
+  await unsubscribe()
+  const { error } = await supabase.auth.signOut()
+  if (error) throw error
+  clearGroup()
+  state.groups = []
+  state.user = null
+}
+
+/* ---------- nhóm ---------- */
+export async function createGroup(groupName: string, name: string) {
+  const { data, error } = await supabase.rpc('create_group', { p_group_name: groupName, p_name: name })
+  if (error) throw error
+  await loadGroups()
+  await selectGroup(data as string)
 }
 
 export async function previewGroup(code: string): Promise<GroupPreview | null> {
@@ -114,28 +198,15 @@ export async function previewGroup(code: string): Promise<GroupPreview | null> {
   return (data as GroupPreview | null) ?? null
 }
 
-export async function enterGroup(code: string, name: string, pin: string, create: boolean): Promise<EnterStatus> {
-  const { data, error } = await supabase.rpc('enter_group', { p_code: code, p_name: name, p_pin: pin, p_create: create })
+export async function joinGroup(code: string, name: string, pin?: string): Promise<JoinStatus> {
+  const { data, error } = await supabase.rpc('join_group', { p_code: code, p_name: name, p_pin: pin ?? null })
   if (error) throw error
-  const r = data as EnterStatus
-  if (r.status === 'ok') await afterEnter()
+  const r = data as JoinStatus
+  if (r.status === 'ok') {
+    await loadGroups()
+    await selectGroup(r.group_id)
+  }
   return r
-}
-
-export async function logout() {
-  const { error } = await supabase.rpc('leave_group')
-  if (error) throw error
-  await unsubscribe()
-  state.me = null
-  state.members = []
-  state.txns = []
-  state.payments = []
-}
-
-export async function changePin(oldPin: string, newPin: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('change_my_pin', { p_old: oldPin, p_new: newPin })
-  if (error) throw error
-  return (data as { status: string }).status === 'ok'
 }
 
 export async function resetPin(memberId: string, newPin: string) {

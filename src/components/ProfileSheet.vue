@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { changePin, logout, membersById, myId, saveProfile, state } from '../store'
+import { logout, membersById, myId, saveProfile, state } from '../store'
 import { compressImage, safeImage } from '../lib/image'
-import { copyText, errMsg, isPin, toast } from '../lib/util'
+import { copyText, errMsg, toast } from '../lib/util'
 
 const emit = defineEmits<{ close: [] }>()
 const me = membersById.value[myId.value]
@@ -66,34 +66,8 @@ async function share() {
   }
 }
 
-/* đổi PIN */
-const showPin = ref(false)
-const oldPin = ref('')
-const newPin = ref('')
-const pinErr = ref('')
-const digits = (v: string) => v.replace(/\D/g, '').slice(0, 4)
-async function doChangePin() {
-  pinErr.value = ''
-  if (!isPin(oldPin.value) || !isPin(newPin.value)) return (pinErr.value = 'PIN phải gồm đúng 4 chữ số.')
-  busy.value = true
-  try {
-    const ok = await changePin(oldPin.value, newPin.value)
-    if (!ok) {
-      pinErr.value = 'PIN hiện tại không đúng.'
-      return
-    }
-    toast('Đã đổi PIN')
-    showPin.value = false
-    oldPin.value = newPin.value = ''
-  } catch (e) {
-    pinErr.value = errMsg(e)
-  } finally {
-    busy.value = false
-  }
-}
-
 async function doLogout() {
-  if (!confirm('Đăng xuất khỏi máy này? Lần sau bạn cần nhập lại mã nhóm, tên và PIN.')) return
+  if (!confirm('Đăng xuất tài khoản khỏi máy này?')) return
   try {
     emit('close')
     await logout()
@@ -106,6 +80,7 @@ async function doLogout() {
 <template>
   <form @submit.prevent="save">
     <h3>Thông tin của bạn</h3>
+    <p class="hint" style="margin-top: -8px">Tên, STK và QR riêng cho nhóm {{ state.me?.group_name }}.</p>
     <label class="f" for="mName">Tên hiển thị</label>
     <input id="mName" v-model="name" class="in" maxlength="30" />
     <label class="f" for="mBank">Ngân hàng</label>
@@ -140,17 +115,6 @@ async function doLogout() {
   </div>
 
   <hr class="section-sep" />
-  <button v-if="!showPin" class="link" @click="showPin = true">Đổi PIN</button>
-  <form v-else @submit.prevent="doChangePin">
-    <label class="f" for="oPin">PIN hiện tại</label>
-    <input id="oPin" v-model="oldPin" class="in pin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" @input="oldPin = digits(oldPin)" />
-    <label class="f" for="nPin">PIN mới</label>
-    <input id="nPin" v-model="newPin" class="in pin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" @input="newPin = digits(newPin)" />
-    <div class="err">{{ pinErr }}</div>
-    <div class="row">
-      <button type="button" @click="showPin = false">Hủy</button>
-      <button type="submit" class="primary" :disabled="busy">Đổi PIN</button>
-    </div>
-  </form>
-  <div><button class="link" style="color: var(--neg)" @click="doLogout">Đăng xuất khỏi máy này</button></div>
+  <p class="hint">Tài khoản: {{ state.user?.email }}</p>
+  <div><button class="link" style="color: var(--neg)" @click="doLogout">Đăng xuất</button></div>
 </template>

@@ -39,7 +39,14 @@ export const isPin = (p: string) => /^\d{4}$/.test(p)
 const MESSAGES: Record<string, string> = {
   invalid_pin: 'PIN phải gồm đúng 4 chữ số.',
   invalid_name: 'Tên không hợp lệ.',
-  not_authenticated: 'Phiên đăng nhập bị lỗi, hãy mở lại app.',
+  not_authenticated: 'Phiên đăng nhập hết hạn, hãy đăng nhập lại.',
+  'Invalid login credentials': 'Sai email hoặc mật khẩu.',
+  'User already registered': 'Email này đã có tài khoản. Hãy đăng nhập.',
+  'Email not confirmed': 'Email chưa được xác nhận. Mở hộp thư và bấm link xác nhận.',
+  'Password should be at least': 'Mật khẩu cần ít nhất 6 ký tự.',
+  'Unable to validate email address': 'Email không hợp lệ.',
+  'rate limit': 'Thao tác quá nhiều lần, thử lại sau ít phút.',
+  'should be different from the old password': 'Mật khẩu mới phải khác mật khẩu cũ.',
   not_admin: 'Chỉ người tạo nhóm làm được việc này.',
   invalid_member: 'Có thành viên không thuộc nhóm.',
   members_group_name_uniq: 'Tên này đã có người dùng trong nhóm.',
@@ -50,7 +57,6 @@ export function errMsg(e: unknown): string {
   const msg = (e as { message?: string })?.message ?? String(e)
   for (const k in MESSAGES) if (msg.includes(k)) return MESSAGES[k]
   if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) return 'Không có mạng. Thử lại khi có kết nối.'
-  if (/Anonymous sign-ins are disabled/i.test(msg)) return 'Supabase chưa bật Anonymous sign-in (xem README).'
   return 'Có lỗi: ' + msg
 }
 
