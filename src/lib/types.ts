@@ -6,9 +6,16 @@ export interface Me {
   is_admin: boolean
 }
 
+export interface Account {
+  id: string
+  email: string
+  name: string
+}
+
 export interface Member {
   id: string
   group_id: string
+  user_id: string | null
   name: string
   is_admin: boolean
   bank: string
@@ -50,12 +57,14 @@ export interface Debt {
 
 export interface GroupPreview {
   name: string
-  members: string[]
+  joined: boolean
+  members: { name: string; claimable: boolean }[]
 }
 
-export type EnterStatus =
-  | { status: 'ok' }
+export type JoinStatus =
+  | { status: 'ok'; group_id: string }
   | { status: 'group_not_found' }
-  | { status: 'new_name' }
+  | { status: 'name_taken' }
+  | { status: 'need_pin' }
   | { status: 'wrong_pin'; remaining: number }
   | { status: 'locked'; minutes: number }

@@ -12,6 +12,8 @@ import ProfileSheet from './ProfileSheet.vue'
 import MemberSheet from './MemberSheet.vue'
 import PaymentRecordSheet from './PaymentRecordSheet.vue'
 import InstallBanner from './InstallBanner.vue'
+import GroupsSheet from './GroupsSheet.vue'
+import Onboarding from './Onboarding.vue'
 
 type SheetState =
   | { type: 'expense'; txn: Txn | null }
@@ -19,6 +21,8 @@ type SheetState =
   | { type: 'profile' }
   | { type: 'member'; id: string }
   | { type: 'record'; payment: Payment }
+  | { type: 'groups' }
+  | { type: 'add'; start: 'create' | 'code' }
 
 const open = ref(false)
 const content = ref<SheetState | null>(null)
@@ -54,6 +58,8 @@ function onResize() {
 onMounted(() => {
   window.addEventListener('resize', onResize)
   nextTick(onResize)
+  // mở link mời khi đã có nhóm khác → hỏi tham gia nhóm mới
+  if (new URLSearchParams(window.location.search).get('code')) show({ type: 'add', start: 'code' })
 })
 onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
@@ -63,7 +69,9 @@ const openMember = (id: string) => (id === myId.value ? show({ type: 'profile' }
 <template>
   <div class="wrap">
     <header class="top">
-      <h1>{{ state.me?.group_name }}</h1>
+      <button class="group-switch" aria-label="Đổi nhóm" @click="show({ type: 'groups' })">
+        <h1>{{ state.me?.group_name }}</h1><span aria-hidden="true">▾</span>
+      </button>
       <button class="me-chip" aria-label="Thông tin của tôi" @click="show({ type: 'profile' })">
         <span class="avatar">{{ initial(me?.name) }}</span>{{ me?.name }}
       </button>
@@ -103,6 +111,17 @@ const openMember = (id: string) => (id === myId.value ? show({ type: 'profile' }
       <ProfileSheet v-else-if="content.type === 'profile'" :key="sheetKey" @close="close" />
       <MemberSheet v-else-if="content.type === 'member'" :key="sheetKey" :id="content.id" @close="close" />
       <PaymentRecordSheet v-else-if="content.type === 'record'" :key="sheetKey" :payment="content.payment" @close="close" />
+      <GroupsSheet
+        v-else-if="content.type === 'groups'"
+        :key="sheetKey"
+        @close="close"
+        @join="show({ type: 'add', start: 'code' })"
+        @create="show({ type: 'add', start: 'create' })"
+      />
+      <template v-else-if="content.type === 'add'">
+        <Onboarding :key="sheetKey" embedded :start="content.start" @done="close" />
+        <button class="link" @click="show({ type: 'groups' })">‹ Danh sách nhóm</button>
+      </template>
     </template>
   </Sheet>
 </template>

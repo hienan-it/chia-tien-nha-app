@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { state } from './store'
 import { toastState } from './lib/util'
+import AuthView from './components/AuthView.vue'
 import Onboarding from './components/Onboarding.vue'
 import MainView from './components/MainView.vue'
 const reload = () => window.location.reload()
@@ -15,6 +16,7 @@ const reload = () => window.location.reload()
       <button class="btn" @click="reload">Thử lại</button>
     </div>
   </div>
+  <AuthView v-else-if="!state.user || state.recovery" />
   <Onboarding v-else-if="!state.me" />
   <MainView v-else />
   <Transition name="fade">

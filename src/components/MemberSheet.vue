@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { nm, resetPin, state } from '../store'
+import { membersById, nm, resetPin, state } from '../store'
 import { errMsg, isPin, toast } from '../lib/util'
 import BankCard from './BankCard.vue'
 
 const props = defineProps<{ id: string }>()
 const emit = defineEmits<{ close: [] }>()
-const isAdmin = !!state.me?.is_admin
+// chỉ thành viên cũ chưa gắn tài khoản mới cần PIN
+const canReset = !!state.me?.is_admin && !membersById.value[props.id]?.user_id
 const showReset = ref(false)
 const pin = ref('')
 const err = ref('')
@@ -31,8 +32,9 @@ async function doReset() {
 <template>
   <h3>{{ nm(id) }}</h3>
   <BankCard :member-id="id" />
-  <template v-if="isAdmin">
+  <template v-if="canReset">
     <button v-if="!showReset" class="link" @click="showReset = true">Đặt lại PIN cho {{ nm(id) }}</button>
+    <p v-if="!showReset" class="hint">{{ nm(id) }} chưa gắn tài khoản. Họ cần PIN này để nhận lại tên khi vào nhóm bằng tài khoản.</p>
     <form v-else @submit.prevent="doReset">
       <label class="f" for="rPin">PIN mới (báo lại cho {{ nm(id) }})</label>
       <input id="rPin" v-model="pin" class="in pin" type="text" inputmode="numeric" maxlength="4" autocomplete="off" @input="pin = pin.replace(/\D/g, '').slice(0, 4)" />
